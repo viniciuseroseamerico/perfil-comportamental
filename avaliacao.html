@@ -89,6 +89,18 @@
             e.preventDefault();
             if (!colaborador) return;
             
+            // Verificar se todas foram respondidas
+            let todasRespondidas = true;
+            perguntas.forEach((_, i) => {
+                const resp = document.querySelector(`input[name="q${i}"]:checked`);
+                if (!resp) todasRespondidas = false;
+            });
+            
+            if (!todasRespondidas) {
+                alert("Por favor, responda todas as perguntas antes de finalizar.");
+                return;
+            }
+            
             let respostas = { executor: 0, administrador: 0, planejador: 0 };
             perguntas.forEach((_, i) => {
                 let resp = document.querySelector(`input[name="q${i}"]:checked`);
