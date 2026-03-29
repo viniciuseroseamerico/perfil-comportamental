@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste Login 2</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Teste de Login - Versão 2</h1>
+    <pre id="resultado">Carregando...</pre>
+
+    <script>
+        const supabaseUrl = "https://afoirnevaxsmdsjqijdx.supabase.co";
+        const supabaseKey = "sb_publishable_bw3-Nmv8Js7itGSg6k4btw_wY7wE960";
+        const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+        async function testar() {
+            const email = "teste@empresa.com";
+            const senha = "123456";
+            
+            // Buscar pelo email
+            const { data, error } = await supabaseClient
+                .from('gestores')
+                .select('*')
+                .eq('email', email);
+            
+            if (error) {
+                document.getElementById('resultado').innerHTML = "❌ ERRO: " + JSON.stringify(error, null, 2);
+                return;
+            }
+            
+            if (!data || data.length === 0) {
+                document.getElementById('resultado').innerHTML = "⚠️ Nenhum gestor encontrado com email: " + email;
+                return;
+            }
+            
+            const gestor = data[0];
+            
+            // Verificar senha
+            if (gestor.senha !== senha) {
+                document.getElementById('resultado').innerHTML = "❌ Senha incorreta!\n\nSenha no banco: " + gestor.senha + "\nSenha digitada: " + senha;
+                return;
+            }
+            
+            // Verificar ativo
+            if (!gestor.ativo) {
+                document.getElementById('resultado').innerHTML = "❌ Gestor inativo!";
+                return;
+            }
+            
+            document.getElementById('resultado').innerHTML = "✅ GESTOR ENCONTRADO!\n\n" + JSON.stringify(gestor, null, 2);
+        }
+        
+        testar();
+    </script>
+</body>
+</html>

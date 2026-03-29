@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avaliação - Perfil Comportamental</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; max-width: 700px; margin: auto; background: #F8FAFC; }
+        .pergunta { margin-bottom: 24px; padding: 20px; background: white; border-radius: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .pergunta p { font-weight: 600; margin-bottom: 12px; }
+        label { display: block; margin: 8px 0; cursor: pointer; }
+        button { background: #0F172A; color: white; border: none; padding: 12px 24px; border-radius: 40px; font-size: 16px; cursor: pointer; width: 100%; margin-top: 20px; }
+        h1 { text-align: center; margin-bottom: 20px; }
+        .info { text-align: center; margin-bottom: 20px; color: #64748B; }
+    </style>
+</head>
+<body>
+    <h1>🎯 Avaliação de Perfil</h1>
+    <div class="info" id="info"></div>
+    <form id="quizForm"><div id="perguntas"></div><button type="submit">Finalizar avaliação</button></form>
+
+    <script>
+        const supabaseUrl = "https://afoirnevaxsmdsjqijdx.supabase.co";
+        const supabaseKey = "sb_publishable_bw3-Nmv8Js7itGSg6k4btw_wY7wE960";
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        let perguntas = [];
+        let colaborador = null;
+
+        async function carregarColaborador() {
+            if (!token) { document.body.innerHTML = "<p style='text-align:center; margin-top:50px;'>🔒 Link inválido.</p>"; return; }
+            const { data } = await supabase.from('colaboradores').select('*').eq('token_convite', token);
+            if (data && data.length > 0) {
+                colaborador = data[0];
+                if (colaborador.status === 'respondido') { document.body.innerHTML = "<p style='text-align:center; margin-top:50px;'>✅ Avaliação já concluída.</p>"; return; }
+                document.getElementById("info").innerHTML = `<p>📱 Bem-vindo(a)! Responda as perguntas.</p>`;
+            } else { document.body.innerHTML = "<p style='text-align:center; margin-top:50px;'>🔒 Convite não encontrado.</p>"; }
+        }
+
+        async function carregarPerguntas() {
+            try {
+                const res = await fetch("dados/perguntas.json");
+                perguntas = await res.json();
+                const container = document.getElementById("perguntas");
+                container.innerHTML = "";
+                perguntas.forEach((p, i) => {
+                    container.innerHTML += `
+                        <div class="pergunta">
+                            <p>${i+1}. ${p.pergunta}</p>
+                            ${p.opcoes.map(op => `<label><input type="radio" name="q${i}" value="${op.tipo}" required> ${op.texto}</label>`).join("")}
+                        </div>
+                    `;
+                });
+            } catch (err) { document.getElementById("perguntas").innerHTML = "<p>Erro ao carregar perguntas.</p>"; }
+        }
+
+        document.getElementById("quizForm").addEventListener("submit", async function(e) {
+            e.preventDefault();
+            if (!colaborador) return;
+            let respostas = { executor: 0, administrador: 0, planejador: 0 };
+            perguntas.forEach((_, i) => { let resp = document.querySelector(`input[name="q${i}"]:checked`); if (resp) respostas[resp.value]++; });
+            let total = perguntas.length;
+            let percentuais = {
+                executor: Math.round((respostas.executor / total) * 100),
+                administrador: Math.round((respostas.administrador / total) * 100),
+                planejador: Math.round((respostas.planejador / total) * 100)
+            };
+            let perfil = Object.keys(respostas).reduce((a, b) => respostas[a] > respostas[b] ? a : b);
+            let nomePerfil = perfil === "executor" ? "Executor" : perfil === "administrador" ? "Administrador" : "Planejador";
+            await supabase.from('colaboradores').update({
+                status: 'respondido', perfil: nomePerfil,
+                executor_percent: percentuais.executor, administrador_percent: percentuais.administrador,
+                planejador_percent: percentuais.planejador, respondido_em: new Date()
+            }).eq('id', colaborador.id);
+            alert(`✅ Avaliação concluída!\n\nSeu perfil: ${nomePerfil}\n\n⚡ Executor: ${percentuais.executor}%\n📊 Administrador: ${percentuais.administrador}%\n🎯 Planejador: ${percentuais.planejador}%`);
+            window.location.href = "index.html";
+        });
+
+        carregarColaborador();
+        carregarPerguntas();
+    </script>
+</body>
+</html>
