@@ -43,28 +43,55 @@
     </div>
 
     <script>
+        // ========== CONFIGURAÇÃO SUPABASE ==========
         const supabaseUrl = "https://afoirnevaxsmdsjqijdx.supabase.co";
         const supabaseKey = "sb_publishable_bw3-Nmv8Js7itGSg6k4btw_wY7wE960";
-        const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
         let gestor = null;
 
+        // ========== CARREGAR GESTOR ==========
         async function carregar() {
             gestor = JSON.parse(localStorage.getItem("gestorLogado"));
-            if (!gestor) { window.location.href = "index.html"; return; }
+            if (!gestor) { 
+                window.location.href = "index.html"; 
+                return; 
+            }
             document.getElementById("infoGestor").innerHTML = `<p>👤 ${gestor.nome} | 🏢 ${gestor.empresa}</p>`;
             await listar();
         }
 
+        // ========== LISTAR COLABORADORES ==========
         async function listar() {
-            const { data } = await supabase.from('colaboradores').select('*').eq('gestor_id', gestor.id);
+            console.log("Buscando colaboradores para gestor:", gestor.id);
+            
+            const { data, error } = await supabase
+                .from('colaboradores')
+                .select('*')
+                .eq('gestor_id', gestor.id);
+            
+            if (error) {
+                console.error("Erro ao listar:", error);
+                document.getElementById("total").innerText = "Erro";
+                return;
+            }
+            
+            console.log("Colaboradores encontrados:", data.length);
+            
             const total = data.length;
             const respondidos = data.filter(c => c.status === 'respondido').length;
+            const pendentes = total - respondidos;
+            
             document.getElementById("total").innerText = total;
             document.getElementById("responderam").innerText = respondidos;
-            document.getElementById("pendentes").innerText = total - respondidos;
-
+            document.getElementById("pendentes").innerText = pendentes;
+            
             const tbody = document.getElementById("tabela");
+            if (data.length === 0) {
+                tbody.innerHTML = "<td><td colspan='4'>Nenhum colaborador convidado ainda.</td></tr>";
+                return;
+            }
+            
             tbody.innerHTML = data.map(c => `
                 <tr>
                     <td>${c.telefone || '-'}</td>
@@ -75,33 +102,38 @@
             `).join("");
         }
 
-    async function convidar() {
-    const telefone = prompt("Digite o telefone do colaborador (ex: 11999998888)");
-    if (!telefone) return;
-    
-    const token = 'token-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
-    
-    const { error } = await supabaseClient
-        .from('colaboradores')
-        .insert({
-            gestor_id: gestor.id,
-            telefone: telefone,
-            status: 'pendente',
-            token_convite: token
-        });
-    
-    if (error) {
-        alert("Erro ao convidar: " + error.message);
-    } else {
-        const link = `https://viniciuseroseamerico.github.io/pesquisa-comportamental/avaliacao.html?token=${token}`;
-        
-        // Mostrar o link em um prompt para copiar manualmente
-        prompt("📱 Copie este link e envie para o colaborador:", link);
-        
-        listar();
-    }
-}
-        function sair() { localStorage.removeItem("gestorLogado"); window.location.href = "index.html"; }
+        // ========== CONVIDAR COLABORADOR ==========
+        async function convidar() {
+            const telefone = prompt("Digite o telefone do colaborador (ex: 11999998888)");
+            if (!telefone) return;
+            
+            const token = 'token-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+            
+            const { error } = await supabase
+                .from('colaboradores')
+                .insert({
+                    gestor_id: gestor.id,
+                    telefone: telefone,
+                    status: 'pendente',
+                    token_convite: token
+                });
+            
+            if (error) {
+                alert("Erro ao convidar: " + error.message);
+            } else {
+                const link = `https://viniciuseroseamerico.github.io/pesquisa-comportamental/avaliacao.html?token=${token}`;
+                prompt("📱 Copie este link e envie para o colaborador:", link);
+                await listar();
+            }
+        }
+
+        // ========== SAIR ==========
+        function sair() { 
+            localStorage.removeItem("gestorLogado"); 
+            window.location.href = "index.html"; 
+        }
+
+        // ========== INICIAR ==========
         carregar();
     </script>
 </body>
