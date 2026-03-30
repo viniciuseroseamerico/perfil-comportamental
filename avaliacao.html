@@ -38,7 +38,6 @@
     <button id="btnFinalizar">Finalizar avaliação</button>
 
     <script>
-        // CONFIGURAÇÃO SUPABASE (UMA ÚNICA VEZ)
         const supabaseUrl = "https://afoirnevaxsmdsjqijdx.supabase.co";
         const supabaseKey = "sb_publishable_bw3-Nmv8Js7itGSg6k4btw_wY7wE960";
         const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
@@ -59,7 +58,7 @@
             
             try {
                 const res = await fetch('https://viniciuseroseamerico.github.io/pesquisa-comportamental/dados/perguntas.json');
-                if (!res.ok) throw new Error("Arquivo não encontrado");
+                if (!res.ok) throw new Error("Arquivo não encontrado (HTTP " + res.status + ")");
                 
                 perguntas = await res.json();
                 
@@ -67,10 +66,16 @@
                 container.innerHTML = "";
                 
                 perguntas.forEach((p, i) => {
+                    // Cria o HTML da pergunta com as opções de resposta
+                    let opcoesHtml = '';
+                    p.opcoes.forEach(op => {
+                        opcoesHtml += `<label><input type="radio" name="q${i}" value="${op.tipo}" required> ${op.texto}</label>`;
+                    });
+                    
                     container.innerHTML += `
                         <div class="pergunta">
                             <p><strong>${i+1}. ${p.pergunta}</strong></p>
-                            ${p.opcoes.map(op => `<label><input type="radio" name="q${i}" value="${op.tipo}" required> ${op.texto}</label>`).join("")}
+                            ${opcoesHtml}
                         </div>
                     `;
                 });
@@ -91,6 +96,7 @@
                 return;
             }
             
+            // Verificar se todas foram respondidas
             let todasRespondidas = true;
             perguntas.forEach((_, i) => {
                 const resp = document.querySelector(`input[name="q${i}"]:checked`);
@@ -102,6 +108,7 @@
                 return;
             }
             
+            // Contar respostas
             let respostas = { executor: 0, administrador: 0, planejador: 0 };
             perguntas.forEach((_, i) => {
                 let resp = document.querySelector(`input[name="q${i}"]:checked`);
@@ -118,6 +125,7 @@
             let perfil = Object.keys(respostas).reduce((a, b) => respostas[a] > respostas[b] ? a : b);
             let nomePerfil = perfil === "executor" ? "Executor" : perfil === "administrador" ? "Administrador" : "Planejador";
             
+            // Salvar no Supabase
             const { error } = await supabaseClient
                 .from('colaboradores')
                 .insert({
