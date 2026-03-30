@@ -38,8 +38,8 @@
         </div>
 
         <div class="cards">
-            <div class="card"><div>👥</div><h3 id="total">0</h3><p>Responderam</p></div>
-            <div class="card"><div>✅</div><h3 id="responderam">0</h3><p>Concluíram</p></div>
+            <div class="card"><div>👥</div><h3 id="total">0</h3><p>Colaboradores que responderam</p></div>
+            <div class="card"><div>✅</div><h3 id="responderam">0</h3><p>Total de respostas</p></div>
         </div>
 
         <div style="background: white; border-radius: 20px; overflow-x: auto;">
@@ -56,80 +56,78 @@
     </div>
 
     <script>
-        (function() {
-            // Configuração única do Supabase
-            const supabaseUrl = "https://afoirnevaxsmdsjqijdx.supabase.co";
-            const supabaseKey = "sb_publishable_bw3-Nmv8Js7itGSg6k4btw_wY7wE960";
-            const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+        // CONFIGURAÇÃO SUPABASE (UMA ÚNICA VEZ)
+        const supabaseUrl = "https://afoirnevaxsmdsjqijdx.supabase.co";
+        const supabaseKey = "sb_publishable_bw3-Nmv8Js7itGSg6k4btw_wY7wE960";
+        const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-            let gestor = null;
+        let gestor = null;
 
-            async function init() {
-                const gestorSalvo = localStorage.getItem("gestorLogado");
-                if (!gestorSalvo) {
-                    window.location.href = "index.html";
-                    return;
-                }
-                
-                gestor = JSON.parse(gestorSalvo);
-                document.getElementById("infoGestor").innerHTML = `<p>👤 ${gestor.nome} | 🏢 ${gestor.empresa}</p>`;
-                
-                const linkEmpresa = `https://viniciuseroseamerico.github.io/pesquisa-comportamental/avaliacao.html?empresa=${gestor.id}`;
-                document.getElementById("linkEmpresa").value = linkEmpresa;
-                
-                await carregarColaboradores();
-            }
-
-            async function carregarColaboradores() {
-                const { data, error } = await supabaseClient
-                    .from('colaboradores')
-                    .select('*')
-                    .eq('gestor_id', gestor.id);
-                
-                if (error) {
-                    console.error("Erro:", error);
-                    return;
-                }
-                
-                const respondidos = data.filter(c => c.status === 'respondido');
-                
-                document.getElementById("total").innerText = respondidos.length;
-                document.getElementById("responderam").innerText = respondidos.length;
-                
-                const tbody = document.getElementById("tabela");
-                if (respondidos.length === 0) {
-                    tbody.innerHTML = "<tr><td colspan='4'>Nenhum colaborador respondeu ainda. Compartilhe o link!</td></tr>";
-                    return;
-                }
-                
-                tbody.innerHTML = respondidos.map(c => `
-                    <tr>
-                        <td>${c.nome || '-'}</td>
-                        <td>${c.cargo || '-'}</td>
-                        <td>${new Date(c.respondido_em || c.created_at).toLocaleDateString()}</td>
-                        <td>${c.perfil || '-'}</td>
-                    </tr>
-                `).join("");
-            }
-
-            function copiarLink() {
-                const input = document.getElementById("linkEmpresa");
-                input.select();
-                input.setSelectionRange(0, 99999);
-                navigator.clipboard.writeText(input.value);
-                alert("✅ Link copiado! Envie para sua equipe.");
-            }
-
-            function sair() {
-                localStorage.removeItem("gestorLogado");
+        async function carregarGestor() {
+            const gestorSalvo = localStorage.getItem("gestorLogado");
+            if (!gestorSalvo) {
                 window.location.href = "index.html";
+                return;
             }
-
-            document.getElementById("btnCopiar").addEventListener("click", copiarLink);
-            document.getElementById("btnSair").addEventListener("click", sair);
             
-            init();
-        })();
+            gestor = JSON.parse(gestorSalvo);
+            document.getElementById("infoGestor").innerHTML = `<p>👤 ${gestor.nome} | 🏢 ${gestor.empresa}</p>`;
+            
+            const linkEmpresa = `https://viniciuseroseamerico.github.io/pesquisa-comportamental/avaliacao.html?empresa=${gestor.id}`;
+            document.getElementById("linkEmpresa").value = linkEmpresa;
+            
+            await listarColaboradores();
+        }
+
+        async function listarColaboradores() {
+            const { data, error } = await supabaseClient
+                .from('colaboradores')
+                .select('*')
+                .eq('gestor_id', gestor.id);
+            
+            if (error) {
+                console.error("Erro:", error);
+                return;
+            }
+            
+            const respondidos = data.filter(c => c.status === 'respondido');
+            
+            document.getElementById("total").innerText = respondidos.length;
+            document.getElementById("responderam").innerText = respondidos.length;
+            
+            const tbody = document.getElementById("tabela");
+            if (respondidos.length === 0) {
+                tbody.innerHTML = "<tr><td colspan='4'>Nenhum colaborador respondeu ainda. Compartilhe o link!</td></tr>";
+                return;
+            }
+            
+            tbody.innerHTML = respondidos.map(c => `
+                <tr>
+                    <td>${c.nome || '-'}</td>
+                    <td>${c.cargo || '-'}</td>
+                    <td>${new Date(c.respondido_em || c.created_at).toLocaleDateString()}</td>
+                    <td>${c.perfil || '-'}</td>
+                </tr>
+            `).join("");
+        }
+
+        function copiarLink() {
+            const input = document.getElementById("linkEmpresa");
+            input.select();
+            input.setSelectionRange(0, 99999);
+            navigator.clipboard.writeText(input.value);
+            alert("✅ Link copiado! Envie para sua equipe.");
+        }
+
+        function sair() {
+            localStorage.removeItem("gestorLogado");
+            window.location.href = "index.html";
+        }
+
+        document.getElementById("btnCopiar").addEventListener("click", copiarLink);
+        document.getElementById("btnSair").addEventListener("click", sair);
+        
+        carregarGestor();
     </script>
 </body>
 </html>
