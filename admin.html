@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Perfil Comportamental</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, sans-serif; background: #F1F5F9; padding: 40px 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .card { background: white; border-radius: 24px; padding: 30px; margin-bottom: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h1 { margin-bottom: 20px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-weight: 600; margin-bottom: 8px; }
+        input, select { width: 100%; padding: 12px; border: 2px solid #E2E8F0; border-radius: 12px; font-size: 14px; }
+        button { background: #0F172A; color: white; border: none; padding: 12px 24px; border-radius: 40px; cursor: pointer; font-weight: 600; }
+        button.perigo { background: #DC2626; }
+        .sucesso { background: #D1FAE5; color: #059669; padding: 12px; border-radius: 12px; margin-bottom: 20px; display: none; }
+        .erro { background: #FEE2E2; color: #DC2626; padding: 12px; border-radius: 12px; margin-bottom: 20px; display: none; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #E2E8F0; }
+        th { background: #F8FAFC; }
+        .btn-pequeno { padding: 4px 12px; font-size: 12px; margin: 2px; }
+        .admin-login { max-width: 400px; margin: 100px auto; }
+    </style>
+</head>
+<body>
+    <div id="adminLogin" class="admin-login">
+        <div class="card">
+            <h1>🔐 Acesso Administrativo</h1>
+            <input type="password" id="senhaAdmin" placeholder="Digite a senha do administrador" style="margin-bottom: 15px;">
+            <button onclick="verificarAdmin()">Entrar</button>
+        </div>
+    </div>
+
+    <div id="adminPainel" style="display: none;">
+        <div class="container">
+            <div class="card">
+                <h1>👨‍💼 Painel do Administrador</h1>
+                <p>Crie novos acessos para gestores</p>
+                
+                <div id="msgSucesso" class="sucesso"></div>
+                <div id="msgErro" class="erro"></div>
+                
+                <form id="formCriarGestor">
+                    <div class="form-group">
+                        <label>📧 E-mail do gestor</label>
+                        <input type="email" id="emailGestor" required placeholder="gestor@empresa.com">
+                    </div>
+                    <div class="form-group">
+                        <label>🔑 Senha</label>
+                        <input type="text" id="senhaGestor" required placeholder="senha123">
+                    </div>
+                    <div class="form-group">
+                        <label>👤 Nome do gestor</label>
+                        <input type="text" id="nomeGestor" required placeholder="Nome completo">
+                    </div>
+                    <div class="form-group">
+                        <label>🏢 Empresa</label>
+                        <input type="text" id="empresaGestor" required placeholder="Nome da empresa">
+                    </div>
+                    <div class="form-group">
+                        <label>📅 Data de expiração (opcional)</label>
+                        <input type="date" id="dataExpiracao" value="2026-12-31">
+                    </div>
+                    <div class="form-group">
+                        <label>💼 Plano</label>
+                        <select id="planoGestor">
+                            <option value="basico">Básico</option>
+                            <option value="pro">Pro</option>
+                            <option value="enterprise">Enterprise</option>
+                        </select>
+                    </div>
+                    <button type="submit">➕ Criar novo gestor</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>📋 Gestores cadastrados</h2>
+                <div style="overflow-x: auto;">
+                    <table id="tabelaGestores">
+                        <thead><tr><th>E-mail</th><th>Nome</th><th>Empresa</th><th>Plano</th><th>Status</th><th>Ações</th></tr></thead>
+                        <tbody id="corpoGestores"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const supabaseUrl = "https://afoirnevaxsmdsjqijdx.supabase.co";
+        const supabaseKey = "sb_publishable_bw3-Nmv8Js7itGSg6k4btw_wY7wE960";
+        const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+        // Senha fixa do administrador (você pode mudar)
+        const SENHA_ADMIN = "admin123";
+
+        function verificarAdmin() {
+            const senha = document.getElementById("senhaAdmin").value;
+            if (senha === SENHA_ADMIN) {
+                document.getElementById("adminLogin").style.display = "none";
+                document.getElementById("adminPainel").style.display = "block";
+                carregarGestores();
+            } else {
+                alert("Senha incorreta!");
+            }
+        }
+
+        document.getElementById("formCriarGestor").addEventListener("submit", async function(e) {
+            e.preventDefault();
+            
+            const email = document.getElementById("emailGestor").value;
+            const senha = document.getElementById("senhaGestor").value;
+            const nome = document.getElementById("nomeGestor").value;
+            const empresa = document.getElementById("empresaGestor").value;
+            const dataExpiracao = document.getElementById("dataExpiracao").value + " 23:59:59";
+            const plano = document.getElementById("planoGestor").value;
+            
+            const { data, error } = await supabaseClient
+                .from('gestores')
+                .insert({
+                    email: email,
+                    senha: senha,
+                    nome: nome,
+                    empresa: empresa,
+                    plano: plano,
+                    data_expiracao: dataExpiracao,
+                    ativo: true
+                });
+            
+            if (error) {
+                document.getElementById("msgErro").style.display = "block";
+                document.getElementById("msgErro").innerHTML = "❌ Erro: " + error.message;
+                setTimeout(() => document.getElementById("msgErro").style.display = "none", 3000);
+            } else {
+                document.getElementById("msgSucesso").style.display = "block";
+                document.getElementById("msgSucesso").innerHTML = "✅ Gestor criado com sucesso!";
+                setTimeout(() => document.getElementById("msgSucesso").style.display = "none", 3000);
+                
+                // Limpar formulário
+                document.getElementById("emailGestor").value = "";
+                document.getElementById("senhaGestor").value = "";
+                document.getElementById("nomeGestor").value = "";
+                document.getElementById("empresaGestor").value = "";
+                
+                carregarGestores();
+            }
+        });
+
+        async function carregarGestores() {
+            const { data, error } = await supabaseClient
+                .from('gestores')
+                .select('*')
+                .order('created_at', { ascending: false });
+            
+            if (error) return;
+            
+            const tbody = document.getElementById("corpoGestores");
+            tbody.innerHTML = data.map(g => `
+                <tr>
+                    <td>${g.email}</td>
+                    <td>${g.nome}</td>
+                    <td>${g.empresa}</td>
+                    <td>${g.plano || 'basico'}</td>
+                    <td><span style="color: ${g.ativo ? 'green' : 'red'}">${g.ativo ? 'Ativo' : 'Inativo'}</span></td>
+                    <td>
+                        <button class="btn-pequeno" onclick="toggleStatus('${g.id}', ${!g.ativo})">${g.ativo ? 'Desativar' : 'Ativar'}</button>
+                        <button class="btn-pequeno" style="background:#DC2626;" onclick="resetarSenha('${g.email}')">Resetar senha</button>
+                    </td>
+                </tr>
+            `).join("");
+        }
+
+        async function toggleStatus(id, novoStatus) {
+            const { error } = await supabaseClient
+                .from('gestores')
+                .update({ ativo: novoStatus })
+                .eq('id', id);
+            
+            if (error) {
+                alert("Erro ao alterar status");
+            } else {
+                carregarGestores();
+            }
+        }
+
+        async function resetarSenha(email) {
+            const novaSenha = Math.random().toString(36).substr(2, 8);
+            const { error } = await supabaseClient
+                .from('gestores')
+                .update({ senha: novaSenha })
+                .eq('email', email);
+            
+            if (error) {
+                alert("Erro ao resetar senha");
+            } else {
+                alert(`✅ Nova senha para ${email}: ${novaSenha}`);
+            }
+        }
+    </script>
+</body>
+</html>
