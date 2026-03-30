@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Avaliação - Perfil Comportamental</title>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { font-family: system-ui; padding: 20px; max-width: 700px; margin: auto; background: #F8FAFC; }
         .pergunta { margin-bottom: 24px; padding: 20px; background: white; border-radius: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
@@ -18,30 +17,33 @@
         .form-group input { width: 100%; padding: 12px; border: 2px solid #E2E8F0; border-radius: 12px; font-size: 16px; }
         .form-group label { font-weight: 600; margin-bottom: 8px; display: block; }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <h1>🎯 Avaliação de Perfil</h1>
     <div id="status"></div>
-    <form id="quizForm">
-        <div id="cadastro" style="margin-bottom: 30px;">
-            <div class="form-group">
-                <label>👤 Seu nome completo:</label>
-                <input type="text" id="nomeColaborador" required placeholder="Digite seu nome">
-            </div>
-            <div class="form-group">
-                <label>💼 Seu cargo/função:</label>
-                <input type="text" id="cargoColaborador" required placeholder="Ex: Analista, Coordenador, Vendedor...">
-            </div>
+    
+    <div id="cadastro" style="margin-bottom: 30px;">
+        <div class="form-group">
+            <label>👤 Seu nome completo:</label>
+            <input type="text" id="nomeColaborador" required placeholder="Digite seu nome">
         </div>
-        <div id="perguntas"></div>
-        <button type="submit">Finalizar avaliação</button>
-    </form>
+        <div class="form-group">
+            <label>💼 Seu cargo/função:</label>
+            <input type="text" id="cargoColaborador" required placeholder="Ex: Analista, Coordenador, Vendedor...">
+        </div>
+    </div>
+    
+    <div id="perguntas"></div>
+    <button id="btnFinalizar">Finalizar avaliação</button>
 
     <script>
-        const SUPABASE_URL = "https://afoirnevaxsmdsjqijdx.supabase.co";
-        const SUPABASE_KEY = "sb_publishable_bw3-Nmv8Js7itGSg6k4btw_wY7wE960";
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        // Configuração Supabase
+        const supabaseUrl = "https://afoirnevaxsmdsjqijdx.supabase.co";
+        const supabaseKey = "sb_publishable_bw3-Nmv8Js7itGSg6k4btw_wY7wE960";
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
+        // Pegar ID da empresa da URL
         const urlParams = new URLSearchParams(window.location.search);
         const empresaId = urlParams.get('empresa');
         
@@ -49,19 +51,22 @@
 
         if (!empresaId) {
             document.getElementById("status").innerHTML = "<div class='erro'>🔒 Link inválido. Solicite um novo link ao gestor.</div>";
-            document.getElementById("quizForm").style.display = "none";
+            document.getElementById("cadastro").style.display = "none";
+            document.getElementById("btnFinalizar").style.display = "none";
         }
 
         async function carregarPerguntas() {
+            document.getElementById("status").innerHTML = "<div class='info'>⏳ Carregando perguntas...</div>";
+            
             try {
-                document.getElementById("status").innerHTML = "<div class='info'>⏳ Carregando perguntas...</div>";
-                
                 const res = await fetch('https://viniciuseroseamerico.github.io/pesquisa-comportamental/dados/perguntas.json');
-                if (!res.ok) throw new Error("HTTP " + res.status);
+                if (!res.ok) throw new Error("Arquivo não encontrado (HTTP " + res.status + ")");
+                
                 perguntas = await res.json();
                 
                 const container = document.getElementById("perguntas");
                 container.innerHTML = "";
+                
                 perguntas.forEach((p, i) => {
                     container.innerHTML += `
                         <div class="pergunta">
@@ -70,15 +75,15 @@
                         </div>
                     `;
                 });
+                
                 document.getElementById("status").innerHTML = `<div class='info'>✅ ${perguntas.length} perguntas carregadas. Responda abaixo:</div>`;
             } catch (err) {
-                document.getElementById("status").innerHTML = `<div class='erro'>❌ Erro ao carregar perguntas: ${err.message}<br><br>Verifique se o arquivo existe em:<br>https://viniciuseroseamerico.github.io/pesquisa-comportamental/dados/perguntas.json</div>`;
+                document.getElementById("status").innerHTML = `<div class='erro'>❌ Erro ao carregar perguntas: ${err.message}</div>`;
+                document.getElementById("btnFinalizar").style.display = "none";
             }
         }
 
-        document.getElementById("quizForm").addEventListener("submit", async function(e) {
-            e.preventDefault();
-            
+        document.getElementById("btnFinalizar").addEventListener("click", async function() {
             const nome = document.getElementById("nomeColaborador").value;
             const cargo = document.getElementById("cargoColaborador").value;
             
@@ -87,6 +92,7 @@
                 return;
             }
             
+            // Verificar se todas foram respondidas
             let todasRespondidas = true;
             perguntas.forEach((_, i) => {
                 const resp = document.querySelector(`input[name="q${i}"]:checked`);
@@ -98,6 +104,7 @@
                 return;
             }
             
+            // Contar respostas
             let respostas = { executor: 0, administrador: 0, planejador: 0 };
             perguntas.forEach((_, i) => {
                 let resp = document.querySelector(`input[name="q${i}"]:checked`);
@@ -114,7 +121,8 @@
             let perfil = Object.keys(respostas).reduce((a, b) => respostas[a] > respostas[b] ? a : b);
             let nomePerfil = perfil === "executor" ? "Executor" : perfil === "administrador" ? "Administrador" : "Planejador";
             
-            await supabase
+            // Salvar no Supabase
+            const { error } = await supabase
                 .from('colaboradores')
                 .insert({
                     gestor_id: parseInt(empresaId),
@@ -128,8 +136,12 @@
                     respondido_em: new Date()
                 });
             
-            alert(`✅ Avaliação concluída!\n\nSeu perfil: ${nomePerfil}\n\n⚡ Executor: ${percentuais.executor}%\n📊 Administrador: ${percentuais.administrador}%\n🎯 Planejador: ${percentuais.planejador}%`);
-            window.location.href = "index.html";
+            if (error) {
+                alert("Erro ao salvar: " + error.message);
+            } else {
+                alert(`✅ Avaliação concluída!\n\nSeu perfil: ${nomePerfil}\n\n⚡ Executor: ${percentuais.executor}%\n📊 Administrador: ${percentuais.administrador}%\n🎯 Planejador: ${percentuais.planejador}%`);
+                window.location.href = "index.html";
+            }
         });
 
         carregarPerguntas();
