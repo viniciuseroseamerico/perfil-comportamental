@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Avaliação - Perfil Comportamental</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { font-family: system-ui; padding: 20px; max-width: 700px; margin: auto; background: #F8FAFC; }
         .pergunta { margin-bottom: 24px; padding: 20px; background: white; border-radius: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
@@ -13,159 +14,117 @@
         h1 { text-align: center; margin-bottom: 20px; }
         .info { text-align: center; margin-bottom: 20px; color: #64748B; }
         .erro { color: #EF4444; text-align: center; margin-top: 20px; }
+        .form-group { margin-bottom: 20px; }
+        .form-group input { width: 100%; padding: 12px; border: 2px solid #E2E8F0; border-radius: 12px; font-size: 16px; }
+        .form-group label { font-weight: 600; margin-bottom: 8px; display: block; }
     </style>
-    <!-- Carregar Supabase primeiro -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <h1>🎯 Avaliação de Perfil</h1>
-    <div class="info" id="info"></div>
+    <div id="status"></div>
     <form id="quizForm">
+        <div id="cadastro" style="margin-bottom: 30px;">
+            <div class="form-group">
+                <label>👤 Seu nome completo:</label>
+                <input type="text" id="nomeColaborador" required placeholder="Digite seu nome">
+            </div>
+            <div class="form-group">
+                <label>💼 Seu cargo/função:</label>
+                <input type="text" id="cargoColaborador" required placeholder="Ex: Analista, Coordenador, Vendedor...">
+            </div>
+        </div>
         <div id="perguntas"></div>
         <button type="submit">Finalizar avaliação</button>
     </form>
 
     <script>
-        // Aguardar o carregamento completo da página e da biblioteca
-        window.addEventListener('DOMContentLoaded', function() {
-            // Verificar se a biblioteca foi carregada
-            if (!window.supabase) {
-                document.getElementById("info").innerHTML = "<p class='erro'>❌ Erro: Biblioteca Supabase não carregada. Recarregue a página.</p>";
+        const SUPABASE_URL = "https://afoirnevaxsmdsjqijdx.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_bw3-Nmv8Js7itGSg6k4btw_wY7wE960";
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const empresaId = urlParams.get('empresa');
+        
+        let perguntas = [];
+
+        async function carregarPerguntas() {
+            try {
+                const res = await fetch("https://viniciuseroseamerico.github.io/pesquisa-comportamental/dados/perguntas.json");
+                perguntas = await res.json();
+                
+                const container = document.getElementById("perguntas");
+                container.innerHTML = "";
+                perguntas.forEach((p, i) => {
+                    container.innerHTML += `
+                        <div class="pergunta">
+                            <p><strong>${i+1}. ${p.pergunta}</strong></p>
+                            ${p.opcoes.map(op => `<label><input type="radio" name="q${i}" value="${op.tipo}" required> ${op.texto}</label>`).join("")}
+                        </div>
+                    `;
+                });
+                document.getElementById("status").innerHTML = `<div class="info">✅ Responda as ${perguntas.length} perguntas abaixo:</div>`;
+            } catch (err) {
+                document.getElementById("status").innerHTML = `<div class='erro'>❌ Erro ao carregar perguntas: ${err.message}</div>`;
+            }
+        }
+
+        document.getElementById("quizForm").addEventListener("submit", async function(e) {
+            e.preventDefault();
+            
+            const nome = document.getElementById("nomeColaborador").value;
+            const cargo = document.getElementById("cargoColaborador").value;
+            
+            if (!nome || !cargo) {
+                alert("Por favor, preencha seu nome e cargo.");
                 return;
             }
-
-            // ========== CONFIGURAÇÃO SUPABASE ==========
-            const SUPABASE_URL = "https://afoirnevaxsmdsjqijdx.supabase.co";
-            const SUPABASE_KEY = "sb_publishable_bw3-Nmv8Js7itGSg6k4btw_wY7wE960";
-            const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-            // ========== PEGAR TOKEN DA URL ==========
-            const urlParams = new URLSearchParams(window.location.search);
-            const token = urlParams.get('token');
             
-            let perguntas = [];
-            let colaborador = null;
-
-            // ========== VALIDAR COLABORADOR ==========
-            async function carregarColaborador() {
-                if (!token) {
-                    document.getElementById("info").innerHTML = "<p class='erro'>🔒 Link inválido. Solicite um novo convite.</p>";
-                    document.getElementById("quizForm").style.display = "none";
-                    return false;
-                }
-                
-                try {
-                    const { data, error } = await supabaseClient
-                        .from('colaboradores')
-                        .select('*')
-                        .eq('token_convite', token);
-                    
-                    if (error || !data || data.length === 0) {
-                        document.getElementById("info").innerHTML = "<p class='erro'>🔒 Convite não encontrado. Entre em contato com seu gestor.</p>";
-                        document.getElementById("quizForm").style.display = "none";
-                        return false;
-                    }
-                    
-                    colaborador = data[0];
-                    if (colaborador.status === 'respondido') {
-                        document.getElementById("info").innerHTML = "<p class='erro'>✅ Esta avaliação já foi concluída. Obrigado!</p>";
-                        document.getElementById("quizForm").style.display = "none";
-                        return false;
-                    }
-                    
-                    document.getElementById("info").innerHTML = `<p>📱 Bem-vindo(a)! Responda as perguntas para concluir sua avaliação.</p>`;
-                    return true;
-                } catch (err) {
-                    document.getElementById("info").innerHTML = `<p class='erro'>❌ Erro de conexão: ${err.message}</p>`;
-                    return false;
-                }
-            }
-
-            // ========== CARREGAR PERGUNTAS ==========
-            async function carregarPerguntas() {
-                try {
-                    const res = await fetch("dados/perguntas.json");
-                    if (!res.ok) throw new Error("Arquivo não encontrado (HTTP " + res.status + ")");
-                    perguntas = await res.json();
-                    
-                    const container = document.getElementById("perguntas");
-                    container.innerHTML = "";
-                    perguntas.forEach((p, i) => {
-                        container.innerHTML += `
-                            <div class="pergunta">
-                                <p>${i+1}. ${p.pergunta}</p>
-                                ${p.opcoes.map(op => `<label><input type="radio" name="q${i}" value="${op.tipo}" required> ${op.texto}</label>`).join("")}
-                            </div>
-                        `;
-                    });
-                } catch (err) {
-                    document.getElementById("perguntas").innerHTML = `<p class='erro'>Erro ao carregar perguntas: ${err.message}<br><br>Verifique se o arquivo existe em:<br>https://viniciuseroseamerico.github.io/pesquisa-comportamental/dados/perguntas.json</p>`;
-                }
-            }
-
-            // ========== FINALIZAR QUIZ ==========
-            document.getElementById("quizForm").addEventListener("submit", async function(e) {
-                e.preventDefault();
-                if (!colaborador) return;
-                
-                // Verificar se todas foram respondidas
-                let todasRespondidas = true;
-                perguntas.forEach((_, i) => {
-                    const resp = document.querySelector(`input[name="q${i}"]:checked`);
-                    if (!resp) todasRespondidas = false;
-                });
-                
-                if (!todasRespondidas) {
-                    alert("Por favor, responda todas as perguntas antes de finalizar.");
-                    return;
-                }
-                
-                let respostas = { executor: 0, administrador: 0, planejador: 0 };
-                perguntas.forEach((_, i) => {
-                    let resp = document.querySelector(`input[name="q${i}"]:checked`);
-                    if (resp) respostas[resp.value]++;
-                });
-                
-                let total = perguntas.length;
-                let percentuais = {
-                    executor: Math.round((respostas.executor / total) * 100),
-                    administrador: Math.round((respostas.administrador / total) * 100),
-                    planejador: Math.round((respostas.planejador / total) * 100)
-                };
-                
-                let perfil = Object.keys(respostas).reduce((a, b) => respostas[a] > respostas[b] ? a : b);
-                let nomePerfil = perfil === "executor" ? "Executor" : perfil === "administrador" ? "Administrador" : "Planejador";
-                
-                try {
-                    await supabaseClient
-                        .from('colaboradores')
-                        .update({
-                            status: 'respondido',
-                            perfil: nomePerfil,
-                            executor_percent: percentuais.executor,
-                            administrador_percent: percentuais.administrador,
-                            planejador_percent: percentuais.planejador,
-                            respondido_em: new Date()
-                        })
-                        .eq('id', colaborador.id);
-                    
-                    alert(`✅ Avaliação concluída!\n\nSeu perfil: ${nomePerfil}\n\n⚡ Executor: ${percentuais.executor}%\n📊 Administrador: ${percentuais.administrador}%\n🎯 Planejador: ${percentuais.planejador}%`);
-                    window.location.href = "index.html";
-                } catch (err) {
-                    alert("Erro ao salvar resultado. Tente novamente.\n\n" + err.message);
-                }
+            let todasRespondidas = true;
+            perguntas.forEach((_, i) => {
+                const resp = document.querySelector(`input[name="q${i}"]:checked`);
+                if (!resp) todasRespondidas = false;
             });
-
-            // ========== INICIAR ==========
-            async function iniciar() {
-                const ok = await carregarColaborador();
-                if (ok) {
-                    await carregarPerguntas();
-                }
+            
+            if (!todasRespondidas) {
+                alert("Por favor, responda todas as perguntas.");
+                return;
             }
             
-            iniciar();
+            let respostas = { executor: 0, administrador: 0, planejador: 0 };
+            perguntas.forEach((_, i) => {
+                let resp = document.querySelector(`input[name="q${i}"]:checked`);
+                if (resp) respostas[resp.value]++;
+            });
+            
+            let total = perguntas.length;
+            let percentuais = {
+                executor: Math.round((respostas.executor / total) * 100),
+                administrador: Math.round((respostas.administrador / total) * 100),
+                planejador: Math.round((respostas.planejador / total) * 100)
+            };
+            
+            let perfil = Object.keys(respostas).reduce((a, b) => respostas[a] > respostas[b] ? a : b);
+            let nomePerfil = perfil === "executor" ? "Executor" : perfil === "administrador" ? "Administrador" : "Planejador";
+            
+            await supabase
+                .from('colaboradores')
+                .insert({
+                    gestor_id: parseInt(empresaId),
+                    nome: nome,
+                    cargo: cargo,
+                    status: 'respondido',
+                    perfil: nomePerfil,
+                    executor_percent: percentuais.executor,
+                    administrador_percent: percentuais.administrador,
+                    planejador_percent: percentuais.planejador,
+                    respondido_em: new Date()
+                });
+            
+            alert(`✅ Avaliação concluída!\n\nSeu perfil: ${nomePerfil}\n\n⚡ Executor: ${percentuais.executor}%\n📊 Administrador: ${percentuais.administrador}%\n🎯 Planejador: ${percentuais.planejador}%`);
+            window.location.href = "index.html";
         });
+
+        carregarPerguntas();
     </script>
 </body>
 </html>
