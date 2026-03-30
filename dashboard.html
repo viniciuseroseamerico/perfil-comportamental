@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Perfil Comportamental</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: system-ui, -apple-system, sans-serif; background: #F1F5F9; padding: 20px; }
-        .header { background: #0F172A; color: white; padding: 20px; border-radius: 24px; margin-bottom: 30px; }
+        .header { background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); color: white; padding: 20px; border-radius: 24px; margin-bottom: 30px; }
         .dashboard { max-width: 1200px; margin: 0 auto; }
         .link-card { background: white; border-radius: 20px; padding: 20px; margin-bottom: 30px; text-align: center; border: 2px solid #E2E8F0; }
         .link-card input { width: 100%; padding: 12px; border: 2px solid #E2E8F0; border-radius: 12px; margin: 10px 0; font-size: 14px; }
@@ -18,6 +19,7 @@
         .card h3 { font-size: 32px; margin: 10px 0; }
         .btn-acao { background: #0F172A; color: white; border: none; padding: 10px 20px; border-radius: 40px; cursor: pointer; margin: 5px; }
         .btn-acao.secundario { background: #475569; }
+        .btn-acao.perigo { background: #DC2626; }
         table { width: 100%; background: white; border-radius: 20px; overflow: hidden; border-collapse: collapse; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #E2E8F0; }
         th { background: #F8FAFC; }
@@ -26,21 +28,23 @@
 
         /* Modal */
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
-        .modal-content { background: white; max-width: 500px; width: 90%; border-radius: 24px; padding: 30px; max-height: 80vh; overflow-y: auto; }
+        .modal-content { background: white; max-width: 600px; width: 90%; border-radius: 24px; padding: 30px; max-height: 80vh; overflow-y: auto; }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         .fechar-modal { background: none; border: none; font-size: 24px; cursor: pointer; }
         .recomendacoes { background: #F8FAFC; padding: 15px; border-radius: 16px; margin: 15px 0; }
-        .area-badge { display: inline-block; background: #E2E8F0; padding: 4px 12px; border-radius: 20px; font-size: 12px; margin: 5px; cursor: pointer; }
+        .area-badge { display: inline-block; background: #E2E8F0; padding: 6px 14px; border-radius: 20px; font-size: 12px; margin: 5px; cursor: pointer; transition: all 0.2s; }
         .area-badge.ativo { background: #0F172A; color: white; }
         
         /* Relatório Geral */
-        .relatorio-geral { background: white; border-radius: 20px; padding: 20px; margin-top: 20px; }
         .grafico-container { display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; margin: 20px 0; }
-        .grafico-barra { flex: 1; min-width: 200px; }
+        .grafico-box { flex: 1; min-width: 250px; text-align: center; }
+        canvas { max-width: 250px; margin: 0 auto; }
         .barra { margin: 15px 0; }
         .barra .label { display: flex; justify-content: space-between; margin-bottom: 5px; }
         .barra .progresso { background: #E2E8F0; border-radius: 8px; overflow: hidden; height: 24px; }
         .barra .progresso-fill { height: 100%; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; color: white; font-size: 12px; font-weight: bold; }
+        
+        .grafico-moderno { background: white; border-radius: 20px; padding: 20px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
     </style>
 </head>
 <body>
@@ -64,6 +68,7 @@
         <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
             <button id="btnRelatorioGeral" class="btn-acao">📊 Relatório Geral da Equipe</button>
             <button id="btnExportarCSV" class="btn-acao secundario">📥 Exportar CSV</button>
+            <button id="btnLimparDados" class="btn-acao perigo">🗑️ Limpar todos os dados</button>
             <button id="btnSair" class="btn-sair">🚪 Sair</button>
         </div>
 
@@ -110,6 +115,7 @@
         let gestor = null;
         let areaSelecionada = "escritorio";
         let todosColaboradores = [];
+        let graficoPizza = null;
 
         async function carregarGestor() {
             const gestorSalvo = localStorage.getItem("gestorLogado");
@@ -131,36 +137,75 @@
             
             const tbody = document.getElementById("tabela");
             if (todosColaboradores.length === 0) {
-                tbody.innerHTML = "<tr><td colspan='5'>Nenhum colaborador respondeu ainda. Compartilhe o link!</td></tr>";
+                tbody.innerHTML = "<td><td colspan='5'>Nenhum colaborador respondeu ainda. Compartilhe o link!</td></tr>";
                 return;
             }
             tbody.innerHTML = todosColaboradores.map(c => `
-                <tr><td>${c.nome || '-'}</td><td>${c.cargo || '-'}</td><td>${new Date(c.respondido_em || c.created_at).toLocaleDateString()}</td>
-                <td>${c.perfil || '-'}</td><td><button class="btn-ver" onclick="verRelatorio(${c.id})">📄 Ver relatório</button></td></tr>
+                <tr>
+                    <td>${c.nome || '-'}</td>
+                    <td>${c.cargo || '-'}</td>
+                    <td>${new Date(c.respondido_em || c.created_at).toLocaleDateString()}</td>
+                    <td>${c.perfil || '-'}</td>
+                    <td><button class="btn-ver" onclick="verRelatorio(${c.id})">📄 Ver relatório</button></td>
+                </tr>
             `).join("");
         }
 
-        // ========== RECOMENDAÇÕES ==========
+        // ========== RECOMENDAÇÕES COM MAIS ÁREAS ==========
         const recomendacoes = {
-            executor: { resumo: "Perfil focado em ação, velocidade e resultados imediatos.",
+            executor: {
+                resumo: "Perfil focado em ação, velocidade e resultados imediatos.",
                 fortes: ["Decisão rápida", "Foco em execução", "Energia para resolver problemas"],
                 atencao: ["Impulsividade", "Pouca atenção a detalhes", "Pode atropelar processos"],
-                recomendacoes: { varejo: ["Atendimento ao cliente", "Reposição de estoque"], clinica: ["Triagem rápida", "Exames de rotina"],
-                    distribuidora: ["Expedição", "Carregamento"], escritorio: ["Tarefas operacionais", "Execução de rotinas"] }
+                recomendacoes: {
+                    varejo: ["Atendimento ao cliente", "Reposição de estoque", "Operações de caixa"],
+                    clinica: ["Triagem rápida", "Exames de rotina", "Atendimento emergencial"],
+                    distribuidora: ["Expedição", "Carregamento", "Controle de saída"],
+                    escritorio: ["Tarefas operacionais", "Execução de rotinas", "Suporte administrativo"],
+                    industria: ["Linha de produção", "Controle de qualidade", "Manutenção corretiva"],
+                    educacao: ["Atividades práticas", "Eventos escolares", "Suporte logístico"],
+                    tecnologia: ["Desenvolvimento rápido", "Testes", "Implantação de sistemas"]
+                }
             },
-            administrador: { resumo: "Perfil organizado, analítico e orientado a processos.",
+            administrador: {
+                resumo: "Perfil organizado, analítico e orientado a processos.",
                 fortes: ["Organização", "Controle", "Consistência nas entregas"],
                 atencao: ["Excesso de cautela", "Resistência a mudanças", "Lentidão em decisões"],
-                recomendacoes: { varejo: ["Controle de estoque", "Gestão de caixa"], clinica: ["Agendamento", "Prontuários"],
-                    distribuidora: ["Controle de frota", "Inventário"], escritorio: ["Gestão de processos", "Controle de documentos"] }
+                recomendacoes: {
+                    varejo: ["Controle de estoque", "Gestão de caixa", "Auditoria de processos"],
+                    clinica: ["Agendamento", "Prontuários", "Controle de insumos"],
+                    distribuidora: ["Controle de frota", "Inventário", "Gestão de rotas"],
+                    escritorio: ["Gestão de processos", "Controle de documentos", "Organização de fluxos"],
+                    industria: ["Planejamento de produção", "Controle de qualidade", "Gestão de suprimentos"],
+                    educacao: ["Matrículas", "Frequência", "Documentação escolar"],
+                    tecnologia: ["Gestão de projetos", "Documentação", "Controle de versões"]
+                }
             },
-            planejador: { resumo: "Perfil estratégico, visionário e focado no longo prazo.",
+            planejador: {
+                resumo: "Perfil estratégico, visionário e focado no longo prazo.",
                 fortes: ["Visão sistêmica", "Antecipação de riscos", "Planejamento"],
                 atencao: ["Excesso de análise", "Dificuldade em executar", "Distanciamento da operação"],
-                recomendacoes: { varejo: ["Layout da loja", "Campanhas promocionais"], clinica: ["Gestão de agenda", "Protocolos clínicos"],
-                    distribuidora: ["Otimização de rotas", "Planejamento logístico"], escritorio: ["Planejamento estratégico", "Inovação"] }
+                recomendacoes: {
+                    varejo: ["Layout da loja", "Campanhas promocionais", "Análise de tendências"],
+                    clinica: ["Gestão de agenda", "Protocolos clínicos", "Planejamento de recursos"],
+                    distribuidora: ["Otimização de rotas", "Planejamento logístico", "Expansão de frota"],
+                    escritorio: ["Planejamento estratégico", "Inovação", "Metas de longo prazo"],
+                    industria: ["Planejamento da produção", "Automação", "Indicadores de desempenho"],
+                    educacao: ["Projeto pedagógico", "Grade curricular", "Planejamento anual"],
+                    tecnologia: ["Arquitetura de sistemas", "Roadmap de produtos", "Inovação tecnológica"]
+                }
             }
         };
+
+        const areas = [
+            { id: "varejo", nome: "🏬 Varejo" },
+            { id: "clinica", nome: "🏥 Clínica/Saúde" },
+            { id: "distribuidora", nome: "🚚 Distribuidora/Logística" },
+            { id: "escritorio", nome: "🏢 Escritório" },
+            { id: "industria", nome: "🏭 Indústria" },
+            { id: "educacao", nome: "📚 Educação" },
+            { id: "tecnologia", nome: "💻 Tecnologia" }
+        ];
 
         function getInterpretacao(perfil) {
             const perfisMap = { "Executor": "executor", "Administrador": "administrador", "Planejador": "planejador" };
@@ -181,22 +226,21 @@
             window.colaboradorAtual = c;
             
             let html = `<h3>👤 ${c.nome}</h3><p><strong>Cargo:</strong> ${c.cargo}</p><p><strong>Perfil:</strong> ${c.perfil}</p>
-                <div style="margin: 20px 0;"><h4>📊 Distribuição</h4>`;
+                <div style="margin: 20px 0;"><h4>📊 Distribuição do Perfil</h4>`;
             html += `<div style="background:#E2E8F0;border-radius:8px;overflow:hidden;">
                 <div style="background:#0B5ED7;width:${c.executor_percent}%;height:20px;color:white;font-size:11px;padding-left:5px;">⚡ ${c.executor_percent}%</div>
                 <div style="background:#198754;width:${c.administrador_percent}%;height:20px;color:white;font-size:11px;padding-left:5px;">📊 ${c.administrador_percent}%</div>
                 <div style="background:#FFC107;width:${c.planejador_percent}%;height:20px;color:#333;font-size:11px;padding-left:5px;">🎯 ${c.planejador_percent}%</div>
             </div></div>`;
             if (interpretacao) {
-                html += `<div class="recomendacoes"><h4>📝 Resumo</h4><p>${interpretacao.resumo}</p>
+                html += `<div class="recomendacoes"><h4>📝 Resumo do Perfil</h4><p>${interpretacao.resumo}</p>
                     <h4>💪 Pontos Fortes</h4><ul>${interpretacao.fortes.map(f => `<li>${f}</li>`).join("")}</ul>
                     <h4>⚠️ Pontos de Atenção</h4><ul>${interpretacao.atencao.map(a => `<li>${a}</li>`).join("")}</ul></div>
-                    <div><h4>🏢 Recomendações</h4><div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:15px;">
-                    <button class="area-badge ${areaSelecionada === 'varejo' ? 'ativo' : ''}" onclick="selecionarArea('varejo')">🏬 Varejo</button>
-                    <button class="area-badge ${areaSelecionada === 'clinica' ? 'ativo' : ''}" onclick="selecionarArea('clinica')">🏥 Clínica</button>
-                    <button class="area-badge ${areaSelecionada === 'distribuidora' ? 'ativo' : ''}" onclick="selecionarArea('distribuidora')">🚚 Distribuidora</button>
-                    <button class="area-badge ${areaSelecionada === 'escritorio' ? 'ativo' : ''}" onclick="selecionarArea('escritorio')">🏢 Escritório</button>
-                </div><div id="recomendacoesArea"><ul>${getRecomendacoesPorArea(c.perfil, areaSelecionada).map(r => `<li>${r}</li>`).join("")}</ul></div></div>`;
+                    <div><h4>🏢 Recomendações por Área</h4><div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:15px;">`;
+                areas.forEach(area => {
+                    html += `<button class="area-badge ${areaSelecionada === area.id ? 'ativo' : ''}" onclick="selecionarArea('${area.id}')">${area.nome}</button>`;
+                });
+                html += `</div><div id="recomendacoesArea"><ul>${getRecomendacoesPorArea(c.perfil, areaSelecionada).map(r => `<li>${r}</li>`).join("")}</ul></div></div>`;
             }
             document.getElementById("conteudoModal").innerHTML = html;
             document.getElementById("modalRelatorio").style.display = "flex";
@@ -211,7 +255,7 @@
             }
         }
 
-        // ========== RELATÓRIO GERAL ==========
+        // ========== RELATÓRIO GERAL COM GRÁFICOS MODERNOS ==========
         async function mostrarRelatorioGeral() {
             if (todosColaboradores.length === 0) {
                 alert("Nenhum colaborador respondeu ainda.");
@@ -226,38 +270,81 @@
             const mediaAdministrador = Math.round(administradorTotal / total);
             const mediaPlanejador = Math.round(planejadorTotal / total);
             
-            const perfilPredominante = [mediaExecutor, mediaAdministrador, mediaPlanejador].indexOf(Math.max(mediaExecutor, mediaAdministrador, mediaPlanejador));
             const perfisNomes = ["Executor", "Administrador", "Planejador"];
+            const medias = [mediaExecutor, mediaAdministrador, mediaPlanejador];
+            const perfilPredominante = perfisNomes[medias.indexOf(Math.max(...medias))];
             
-            let html = `<h3>👥 Equipe: ${gestor.empresa}</h3>
+            let html = `<div class="grafico-moderno">
+                <h3>👥 Equipe: ${gestor.empresa}</h3>
                 <p><strong>Total de colaboradores avaliados:</strong> ${total}</p>
-                <div class="grafico-container"><div class="grafico-barra"><h4>📊 Média dos Perfis da Equipe</h4>`;
-            html += `<div class="barra"><div class="label"><span>⚡ Executor</span><span>${mediaExecutor}%</span></div>
-                <div class="progresso"><div class="progresso-fill" style="width:${mediaExecutor}%; background:#0B5ED7;">${mediaExecutor}%</div></div></div>`;
-            html += `<div class="barra"><div class="label"><span>📊 Administrador</span><span>${mediaAdministrador}%</span></div>
-                <div class="progresso"><div class="progresso-fill" style="width:${mediaAdministrador}%; background:#198754;">${mediaAdministrador}%</div></div></div>`;
-            html += `<div class="barra"><div class="label"><span>🎯 Planejador</span><span>${mediaPlanejador}%</span></div>
-                <div class="progresso"><div class="progresso-fill" style="width:${mediaPlanejador}%; background:#FFC107;">${mediaPlanejador}%</div></div></div>`;
-            html += `</div><div style="flex:1;"><h4>🏆 Perfil Predominante da Equipe</h4><div style="text-align:center;padding:20px;background:#F8FAFC;border-radius:16px;">
-                <div style="font-size:48px;">${perfisNomes[perfilPredominante] === "Executor" ? "⚡" : perfisNomes[perfilPredominante] === "Administrador" ? "📊" : "🎯"}</div>
-                <h3>${perfisNomes[perfilPredominante]}</h3>
-                <p>Este é o perfil que mais se destaca na sua equipe.</p></div></div></div>`;
-            
-            html += `<div class="recomendacoes"><h4>📋 Lista de Colaboradores</h4><table style="width:100%;font-size:13px;"><thead><tr><th>Nome</th><th>Cargo</th><th>Perfil</th><th>Executor</th><th>Administrador</th><th>Planejador</th></tr></thead><tbody>`;
+                
+                <div class="grafico-container">
+                    <div class="grafico-box">
+                        <h4>📊 Média dos Perfis</h4>
+                        <canvas id="graficoPizzaEquipe" width="250" height="250"></canvas>
+                    </div>
+                    <div class="grafico-box">
+                        <h4>🏆 Perfil Predominante</h4>
+                        <div style="text-align:center;padding:20px;background:#F8FAFC;border-radius:16px;">
+                            <div style="font-size:64px;">${perfilPredominante === "Executor" ? "⚡" : perfilPredominante === "Administrador" ? "📊" : "🎯"}</div>
+                            <h3>${perfilPredominante}</h3>
+                            <p>Este é o perfil que mais se destaca na sua equipe.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin: 20px 0;">
+                    <h4>📈 Distribuição Percentual da Equipe</h4>
+                    <div class="barra"><div class="label"><span>⚡ Executor</span><span>${mediaExecutor}%</span></div>
+                        <div class="progresso"><div class="progresso-fill" style="width:${mediaExecutor}%; background:#0B5ED7;">${mediaExecutor}%</div></div></div>
+                    <div class="barra"><div class="label"><span>📊 Administrador</span><span>${mediaAdministrador}%</span></div>
+                        <div class="progresso"><div class="progresso-fill" style="width:${mediaAdministrador}%; background:#198754;">${mediaAdministrador}%</div></div></div>
+                    <div class="barra"><div class="label"><span>🎯 Planejador</span><span>${mediaPlanejador}%</span></div>
+                        <div class="progresso"><div class="progresso-fill" style="width:${mediaPlanejador}%; background:#FFC107;">${mediaPlanejador}%</div></div></div>
+                </div>
+                
+                <div class="recomendacoes">
+                    <h4>📋 Lista de Colaboradores</h4>
+                    <table style="width:100%;font-size:13px;"><thead><tr><th>Nome</th><th>Cargo</th><th>Perfil</th><th>Executor</th><th>Administrador</th><th>Planejador</th></tr></thead><tbody>`;
             todosColaboradores.forEach(c => {
                 html += `<tr><td>${c.nome}</td><td>${c.cargo}</td><td>${c.perfil}</td>
                     <td>${c.executor_percent}%</td><td>${c.administrador_percent}%</td><td>${c.planejador_percent}%</td></tr>`;
             });
-            html += `</tbody></table></div>`;
+            html += `</tbody></table></div></div>`;
             
             document.getElementById("conteudoModalGeral").innerHTML = html;
             document.getElementById("modalRelatorioGeral").style.display = "flex";
+            
+            // Criar gráfico de pizza
+            setTimeout(() => {
+                const ctx = document.getElementById('graficoPizzaEquipe')?.getContext('2d');
+                if (ctx) {
+                    if (graficoPizza) graficoPizza.destroy();
+                    graficoPizza = new Chart(ctx, {
+                        type: 'pie',
+                        data: {
+                            labels: [`Executor ${mediaExecutor}%`, `Administrador ${mediaAdministrador}%`, `Planejador ${mediaPlanejador}%`],
+                            datasets: [{
+                                data: [mediaExecutor, mediaAdministrador, mediaPlanejador],
+                                backgroundColor: ['#0B5ED7', '#198754', '#FFC107'],
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: { legend: { position: 'bottom' } }
+                        }
+                    });
+                }
+            }, 100);
         }
 
-        function fecharModal() { document.getElementById("modalRelatorio").style.display = "none"; }
-        function fecharModalGeral() { document.getElementById("modalRelatorioGeral").style.display = "none"; }
-
+        // ========== EXPORTAR CSV ==========
         function exportarCSVGeral() {
+            if (todosColaboradores.length === 0) {
+                alert("Nenhum dado para exportar.");
+                return;
+            }
             let csv = "Nome,Cargo,Perfil,Executor%,Administrador%,Planejador%,Data\n";
             todosColaboradores.forEach(c => {
                 csv += `"${c.nome}","${c.cargo}","${c.perfil}",${c.executor_percent}%,${c.administrador_percent}%,${c.planejador_percent}%,"${new Date(c.respondido_em).toLocaleDateString()}"\n`;
@@ -271,18 +358,36 @@
             alert("✅ CSV exportado com sucesso!");
         }
 
+        // ========== IMPRIMIR RELATÓRIO ==========
         function imprimirRelatorio() {
             const conteudo = document.getElementById("conteudoModalGeral").innerHTML;
             const win = window.open('', '_blank');
-            win.document.write(`<html><head><title>Relatório da Equipe - ${gestor.empresa}</title><style>body{font-family:sans-serif;padding:20px;} table{border-collapse:collapse;width:100%;} th,td{border:1px solid #ddd;padding:8px;text-align:left;} th{background:#f2f2f2;}</style></head><body>${conteudo}</body></html>`);
+            win.document.write(`<html><head><title>Relatório da Equipe - ${gestor.empresa}</title>
+                <style>body{font-family:sans-serif;padding:20px;} table{border-collapse:collapse;width:100%;} th,td{border:1px solid #ddd;padding:8px;text-align:left;} th{background:#f2f2f2;}</style></head>
+                <body><h2>Relatório da Equipe - ${gestor.empresa}</h2>${conteudo}</body></html>`);
             win.document.close();
             win.print();
         }
 
-        function exportarCSVIndividual() {
-            exportarCSVGeral();
+        // ========== LIMPAR DADOS ==========
+        async function limparDados() {
+            if (!confirm("⚠️ ATENÇÃO! Isso irá apagar TODOS os resultados da sua equipe. Esta ação não pode ser desfeita. Confirmar?")) return;
+            if (!confirm("Digite 'LIMPAR' para confirmar:")) return;
+            
+            const { error } = await supabaseClient
+                .from('colaboradores')
+                .delete()
+                .eq('gestor_id', gestor.id);
+            
+            if (error) {
+                alert("Erro ao limpar dados: " + error.message);
+            } else {
+                alert("✅ Todos os dados foram removidos com sucesso!");
+                await listarColaboradores();
+            }
         }
 
+        // ========== COPIAR LINK ==========
         function copiarLink() {
             const input = document.getElementById("linkEmpresa");
             input.select();
@@ -290,12 +395,19 @@
             alert("✅ Link copiado! Envie para sua equipe.");
         }
 
+        // ========== SAIR ==========
         function sair() { localStorage.removeItem("gestorLogado"); window.location.href = "index.html"; }
 
+        // ========== FECHAR MODAIS ==========
+        function fecharModal() { document.getElementById("modalRelatorio").style.display = "none"; }
+        function fecharModalGeral() { document.getElementById("modalRelatorioGeral").style.display = "none"; }
+
+        // ========== EVENTOS ==========
         document.getElementById("btnCopiar").addEventListener("click", copiarLink);
         document.getElementById("btnSair").addEventListener("click", sair);
         document.getElementById("btnRelatorioGeral").addEventListener("click", mostrarRelatorioGeral);
         document.getElementById("btnExportarCSV").addEventListener("click", exportarCSVGeral);
+        document.getElementById("btnLimparDados").addEventListener("click", limparDados);
         
         carregarGestor();
     </script>
