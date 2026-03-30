@@ -10,20 +10,36 @@
         body { font-family: system-ui, -apple-system, sans-serif; background: #F1F5F9; padding: 20px; }
         .header { background: #0F172A; color: white; padding: 20px; border-radius: 24px; margin-bottom: 30px; }
         .dashboard { max-width: 1200px; margin: 0 auto; }
+        .link-card { background: white; border-radius: 20px; padding: 20px; margin-bottom: 30px; text-align: center; border: 2px solid #E2E8F0; }
+        .link-card h3 { margin-bottom: 10px; }
+        .link-card input { width: 100%; padding: 12px; border: 2px solid #E2E8F0; border-radius: 12px; margin: 10px 0; font-size: 14px; }
+        .btn-copiar { background: #0F172A; color: white; border: none; padding: 10px 20px; border-radius: 40px; cursor: pointer; }
         .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
         .card { background: white; padding: 20px; border-radius: 20px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .card h3 { font-size: 32px; margin: 10px 0; }
-        button { background: #0F172A; color: white; border: none; padding: 10px 20px; border-radius: 40px; cursor: pointer; margin-right: 10px; margin-bottom: 20px; }
         table { width: 100%; background: white; border-radius: 20px; overflow: hidden; border-collapse: collapse; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #E2E8F0; }
         th { background: #F8FAFC; }
         .status-pendente { background: #FEF3C7; color: #D97706; padding: 4px 12px; border-radius: 40px; font-size: 12px; display: inline-block; }
         .status-respondido { background: #D1FAE5; color: #059669; padding: 4px 12px; border-radius: 40px; font-size: 12px; display: inline-block; }
+        button { background: #0F172A; color: white; border: none; padding: 10px 20px; border-radius: 40px; cursor: pointer; }
+        .btn-sair { background: #EF4444; margin-left: 10px; }
     </style>
 </head>
 <body>
     <div class="dashboard">
-        <div class="header"><div id="infoGestor"></div></div>
+        <div class="header">
+            <div id="infoGestor"></div>
+            <button onclick="sair()" class="btn-sair" style="float: right; margin-top: -40px;">🚪 Sair</button>
+        </div>
+
+        <!-- Card do Link da Empresa -->
+        <div class="link-card">
+            <h3>🔗 Link da sua empresa</h3>
+            <p>Compartilhe este link com sua equipe para eles responderem a avaliação:</p>
+            <input type="text" id="linkEmpresa" readonly value="Carregando...">
+            <button onclick="copiarLink()" class="btn-copiar">📋 Copiar link</button>
+        </div>
 
         <div class="cards">
             <div class="card"><div>👥</div><h3 id="total">0</h3><p>Colaboradores</p></div>
@@ -31,39 +47,40 @@
             <div class="card"><div>⏳</div><h3 id="pendentes">0</h3><p>Pendentes</p></div>
         </div>
 
-        <button id="btnConvidar">📨 Convidar colaborador</button>
-        <button id="btnSair">🚪 Sair</button>
-
         <div style="margin-top: 20px; background: white; border-radius: 20px; overflow-x: auto;">
+            <h3 style="padding: 20px 0 0 20px;">📋 Colaboradores que já responderam</h3>
             <table>
-                <thead><tr><th>Telefone</th><th>Status</th><th>Data convite</th><th>Perfil</th></tr></thead>
+                <thead><tr><th>Nome</th><th>Cargo</th><th>Data</th><th>Perfil</th></tr></thead>
                 <tbody id="tabela"></tbody>
             </table>
         </div>
     </div>
 
     <script>
-        // ========== CONFIGURAÇÃO SUPABASE ==========
         const SUPABASE_URL = "https://afoirnevaxsmdsjqijdx.supabase.co";
         const SUPABASE_KEY = "sb_publishable_bw3-Nmv8Js7itGSg6k4btw_wY7wE960";
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         let gestor = null;
 
-        // ========== CARREGAR GESTOR ==========
         async function carregarGestor() {
             const gestorSalvo = localStorage.getItem("gestorLogado");
             if (!gestorSalvo) {
                 window.location.href = "index.html";
                 return null;
             }
-            return JSON.parse(gestorSalvo);
+            gestor = JSON.parse(gestorSalvo);
+            document.getElementById("infoGestor").innerHTML = `<p>👤 ${gestor.nome} | 🏢 ${gestor.empresa}</p>`;
+            
+            // Gerar link da empresa
+            const linkEmpresa = `https://viniciuseroseamerico.github.io/pesquisa-comportamental/avaliacao.html?empresa=${gestor.id}`;
+            document.getElementById("linkEmpresa").value = linkEmpresa;
+            
+            await listarColaboradores();
+            return gestor;
         }
 
-        // ========== LISTAR COLABORADORES ==========
         async function listarColaboradores() {
-            if (!gestor || !gestor.id) return;
-            
             const { data, error } = await supabase
                 .from('colaboradores')
                 .select('*')
@@ -76,73 +93,40 @@
             
             const total = data.length;
             const respondidos = data.filter(c => c.status === 'respondido').length;
-            const pendentes = total - respondidos;
             
             document.getElementById("total").innerText = total;
             document.getElementById("responderam").innerText = respondidos;
-            document.getElementById("pendentes").innerText = pendentes;
+            document.getElementById("pendentes").innerText = total - respondidos;
             
             const tbody = document.getElementById("tabela");
             if (data.length === 0) {
-                tbody.innerHTML = "<tr><td colspan='4'>Nenhum colaborador convidado ainda.</td></tr>";
+                tbody.innerHTML = "<tr><td colspan='4'>Nenhum colaborador respondeu ainda. Compartilhe o link!</td></tr>";
                 return;
             }
             
-            tbody.innerHTML = data.map(c => `
+            tbody.innerHTML = data.filter(c => c.status === 'respondido').map(c => `
                 <tr>
-                    <td>${c.telefone || '-'}</td>
-                    <td><span class="${c.status === 'respondido' ? 'status-respondido' : 'status-pendente'}">${c.status === 'respondido' ? '✅ Respondido' : '⏳ Pendente'}</span></td>
-                    <td>${new Date(c.created_at).toLocaleDateString()}</td>
+                    <td>${c.nome || '-'}</td>
+                    <td>${c.cargo || '-'}</td>
+                    <td>${new Date(c.respondido_em || c.created_at).toLocaleDateString()}</td>
                     <td>${c.perfil || '-'}</td>
                 </tr>
             `).join("");
         }
 
-        // ========== CONVIDAR COLABORADOR ==========
-        async function convidarColaborador() {
-            const telefone = prompt("Digite o telefone do colaborador (ex: 11999998888)");
-            if (!telefone) return;
-            
-            const token = 'token-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
-            
-            const { error } = await supabase
-                .from('colaboradores')
-                .insert({
-                    gestor_id: gestor.id,
-                    telefone: telefone,
-                    status: 'pendente',
-                    token_convite: token
-                });
-            
-            if (error) {
-                alert("Erro ao convidar: " + error.message);
-            } else {
-                const link = `https://viniciuseroseamerico.github.io/pesquisa-comportamental/avaliacao.html?token=${token}`;
-                prompt("📱 Copie este link e envie para o colaborador:", link);
-                await listarColaboradores();
-            }
+        function copiarLink() {
+            const input = document.getElementById("linkEmpresa");
+            input.select();
+            document.execCommand("copy");
+            alert("✅ Link copiado! Envie para sua equipe.");
         }
 
-        // ========== SAIR ==========
         function sair() {
             localStorage.removeItem("gestorLogado");
             window.location.href = "index.html";
         }
 
-        // ========== INICIAR ==========
-        async function init() {
-            gestor = await carregarGestor();
-            if (!gestor) return;
-            
-            document.getElementById("infoGestor").innerHTML = `<p>👤 ${gestor.nome} | 🏢 ${gestor.empresa}</p>`;
-            
-            document.getElementById("btnConvidar").onclick = () => convidarColaborador();
-            document.getElementById("btnSair").onclick = () => sair();
-            
-            await listarColaboradores();
-        }
-        
-        init();
+        carregarGestor();
     </script>
 </body>
 </html>
